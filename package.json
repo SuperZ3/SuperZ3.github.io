@@ -1,0 +1,12 @@
+{
+  "name": "dadi",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:SuperZ3/SuperZ3.github.io.git",
+  "author": "SuperZ3 <zhangzz1024@163.com>",
+  "license": "MIT",
+  "scripts": {
+    "docs:dev": "vuepress dev docs",
+    "docs:build": "vuepress build docs"
+  }
+}
