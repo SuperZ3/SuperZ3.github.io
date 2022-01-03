@@ -1,0 +1,38 @@
+Arguments: 
+  C:\Program Files\nodejs\node.exe C:\Users\ZZZ\AppData\Roaming\npm\node_modules\yarn\bin\yarn.js add vuepress@next -D
+
+PATH: 
+  C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\Git\cmd;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\nodejs\;D:\Microsoft VS Code\bin;%JAVA_HOME%\bin;%JAVA_HOME%\jre\bin;C:\Ruby22\bin;C:\Users\ZZZ\AppData\Local\Microsoft\WindowsApps;D:\Microsoft VS Code\bin;C:\Users\ZZZ\AppData\Local\BypassRuntm;C:\Users\ZZZ\AppData\Local\Microsoft\WindowsApps;C:\Users\ZZZ\AppData\Roaming\npm;D:\Bin;D:\AndroidSDK\platform-tools;D:\MongoD\bin;
+
+Yarn version: 
+  1.22.17
+
+Node version: 
+  12.13.1
+
+Platform: 
+  win32 x64
+
+Trace: 
+  Error: connect ETIMEDOUT 222.85.26.222:443
+      at TCPConnectWrap.afterConnect [as oncomplete] (net.js:1129:14)
+
+npm manifest: 
+  {
+    "name": "dadi",
+    "version": "1.0.0",
+    "main": "index.js",
+    "repository": "git@github.com:SuperZ3/SuperZ3.github.io.git",
+    "author": "SuperZ3 <zhangzz1024@163.com>",
+    "license": "MIT",
+    "scripts": {
+      "docs:dev": "vuepress dev docs",
+      "docs:build": "vuepress build docs"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
