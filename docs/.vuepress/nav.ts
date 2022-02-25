@@ -6,8 +6,13 @@ module.exports = [
             { text: 'git入门', link: '/daily/git/' },
         ]
     },
-    { text: 'LeetCode', link: '/algorithm/' },
-    { text: 'Go', link: '/go/' },
+    {
+        text: '算法学习', children: [
+            { text: '算法', link: '/algorithm/learn/' },
+            { text: 'LeetCode', link: '/algorithm/leetcode/' },
+        ]
+    },
+    { text: 'Rust', link: '/rust/' },
     { text: '计算机基础', link: '/basic/' },
     { text: 'GitHub', link: 'https://github.com/SuperZ3' },
 ]

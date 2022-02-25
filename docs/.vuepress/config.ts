@@ -20,6 +20,6 @@ export default defineUserConfig<DefaultThemeOptions>({
     themeConfig: {
         navbar: require('./nav'),
         sidebar: require('./sidebar'),
-        lastUpdated: true
+        lastUpdated: false
     }
 })
