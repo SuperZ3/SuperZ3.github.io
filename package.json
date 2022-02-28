@@ -12,5 +12,6 @@
   "devDependencies": {
     "vuepress": "^2.0.0-beta.32"
   },
-  "dependencies": {}
+  "dependencies": {
+  }
 }

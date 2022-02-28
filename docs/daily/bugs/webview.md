@@ -2,7 +2,7 @@
 
 > 配置简单的 android webview 代码，在 android studio 内调试页面，降低与客户端同学沟通成本。
 
-1. [官网](https://developer.android.com/guide/webapps/webview) 下载 android studio，并使用 kotlin 初始项目。
+1. [官网](https://developer.android.com/guide/webapps/webview) 下载 android studio，并使用 kotlin 初始项目
 
 2. 在 /MyFirstApp/app/src/main/AndroidManifest.xml 文件下，添加如下代码
 `<uses-permission android:name="android.permission.INTERNET" />`

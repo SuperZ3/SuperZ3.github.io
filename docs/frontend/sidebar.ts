@@ -1,9 +1,10 @@
 module.exports = [
     {
-        text: '语言基础',
-        collapsible: true,
+        text: 'JavaScript 基础',
+        collapsible: false,
+        sidebarDepth: 1,
         children: [
-            './first.md'
+            './prototype.md',
         ]
     }
 ]
