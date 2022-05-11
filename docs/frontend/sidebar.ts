@@ -6,5 +6,13 @@ module.exports = [
         children: [
             './prototype.md',
         ]
+    },
+    {
+        text: '打包工具',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './webpack.md',
+        ]
     }
 ]
