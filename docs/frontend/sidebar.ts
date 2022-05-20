@@ -5,6 +5,8 @@ module.exports = [
         sidebarDepth: 1,
         children: [
             './prototype.md',
+            './promise.md',
+            './fetch.md',
         ]
     },
     {
