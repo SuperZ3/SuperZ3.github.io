@@ -4,8 +4,9 @@ module.exports = [
         collapsible: false,
         sidebarDepth: 1,
         children: [
-            './prototype.md',
             './promise.md',
+            './generator.md',
+            './prototype.md',
             './fetch.md',
         ]
     },
