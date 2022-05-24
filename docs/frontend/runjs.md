@@ -2,7 +2,7 @@
 
 打开一个页面，并在 Chrome 上更多工具 --> 任务管理器，可以看到工作进程：
 
-![image](./images/process.png)
+![image](./images/broswser/process.png)
 
 1. 浏览器进程：负责界面展示、用户交互、子进程管理，及存储等功能
 
@@ -33,7 +33,7 @@
 
 7. 合成和显示：所有图块都栅格化后，合成线程会生成绘制图块命令“DrawQuad”提交给浏览器进程。浏览器 viz 组件根据该命令，将 GPU 中内容绘制到内存中，再显示到屏幕上
 
-![image](./images/renderprocess.png)
+![image](./images/broswser/renderprocess.png)
 
 JavaScript 执行流程
 
@@ -41,7 +41,7 @@ JavaScript 是一门动态、弱类型语言，它不要求在声明变量时指
 
 在执行一段代码前（JavaScript文件），首先会对其编译，生成 AST 和执行上下文（此时只编译顶层代码，不包含嵌套函数声明），AST 是计算机可以处理的结构化的代码，然后解释器会将AST转换为字节码，接着解释器解释执行代码，如果一段代码反复被执行多次，会将其标记成热代码，交给编译器生成机器码并存在内存中，这样下次执行时直接执行机器码即可，提升执行效率
 
-![image](./images/compile.png)
+![image](./images/broswser/compile.png)
 
 浏览器内存模型可划分为栈内存、堆内存。其中栈内存存储执行上下文，堆内存存储引用类型数据，如 object、function
 
@@ -132,7 +132,7 @@ outer();
 
 3. 执行 `outer()`：结果如注释所示，执行 inner() 也会先创建 inner 的上下文，原理与 outer 类似，不再赘述
 
-![image](./images/excuter.png)
+![image](./images/broswser/excuter.png)
 
 闭包：对于嵌套作用域来说，内部作用域可以引用外部作用域定义的变量，若在一个内部函数中，引用了外部作用域的变量，就创建了闭包，根据词法作用域，内部作用域总是可以访问外部作用域的变量，即使外部作用域已经销毁
 
@@ -166,5 +166,5 @@ fn();// 2;
 
 在控制台执行上述代码，console.dir(innerOne)，即可发现在inner函数的作用域上保存着对Closure的引用
 
-![image](./images/clusre.png)
-![image](./images/console.png)
+![image](./images/broswser/clusre.png)
+![image](./images/broswser/console.png)
