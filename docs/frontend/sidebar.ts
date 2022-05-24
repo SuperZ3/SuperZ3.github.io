@@ -8,6 +8,16 @@ module.exports = [
             './generator.md',
             './prototype.md',
             './fetch.md',
+            './test.md',
+            './mockjs.md',
+        ]
+    },
+    {
+        text: 'CSS',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './sass.md',
         ]
     },
     {
@@ -24,7 +34,8 @@ module.exports = [
         sidebarDepth: 1,
         children: [
             './runjs.md',
-            './eventloop.md'
+            './eventloop.md',
+            './net.md'
         ]
     }
 ]
