@@ -17,5 +17,13 @@ module.exports = [
         children: [
             './webpack.md',
         ]
+    },
+    {
+        text: '浏览器',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './runjs.md',
+        ]
     }
 ]
