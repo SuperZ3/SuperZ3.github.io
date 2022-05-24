@@ -24,6 +24,7 @@ module.exports = [
         sidebarDepth: 1,
         children: [
             './runjs.md',
+            './eventloop.md'
         ]
     }
 ]
