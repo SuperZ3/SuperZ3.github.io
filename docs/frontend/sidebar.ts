@@ -35,7 +35,7 @@ module.exports = [
         children: [
             './runjs.md',
             './eventloop.md',
-            './net.md'
+            './net.md',
         ]
     }
 ]
