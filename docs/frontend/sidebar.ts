@@ -36,6 +36,7 @@ module.exports = [
             './runjs.md',
             './eventloop.md',
             './net.md',
+            './cache.md'
         ]
     }
 ]
