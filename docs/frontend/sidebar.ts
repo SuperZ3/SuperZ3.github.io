@@ -9,7 +9,7 @@ module.exports = [
             './prototype.md',
             './fetch.md',
             './test.md',
-            './mockjs.md',
+            './practicejs.md',
         ]
     },
     {
@@ -34,9 +34,21 @@ module.exports = [
         sidebarDepth: 1,
         children: [
             './runjs.md',
-            './eventloop.md',
+            './eventloop_b.md',
             './net.md',
             './cache.md'
+        ]
+    },
+    {
+        text: 'Node',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './eventloop_n.md',
+            './module.md',
+            './event.md',
+            './stream.md',
+            './koa.md',
         ]
     }
 ]
