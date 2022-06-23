@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <script>
+                const TriggerOpTypes = {
+    SET: 'set',
+    ADD: 'add',
+    DELETE: 'delete',
+    CLEAR: 'clear'
+}
+const isArray = (obj) => Object.prototype.toString.call(obj) === '[object Array]'
+const isIntegerKey = (key) => (typeof key === 'string' && '' + parseInt(key, 10) === key)
+const hasOwn = (target, key) => target.hasOwnProperty(key)
+const isObject = (o) => o !== null && typeof o === 'object'
+const isString = v => typeof v === 'string'
+const isFunction = o => typeof o === 'function'
+const isVNode = o => !!o.__v_isVNode
+
+const reactiveMap = new WeakMap()
+const targetMap = new WeakMap()
+let activeEffect = undefined
+
+const arrayInstrumentations = createArrayInstrumentations()
+let shouldTrack = true
+const trackStack = []
+function pauseTracking() {
+    trackStack.push(shouldTrack)
+    shouldTrack = false
+}
+function resetTracking() {
+    const last = trackStack.pop()
+    shouldTrack = last === undefined ? true : last 
+}
+function createArrayInstrumentations() {
+    const instrumentations = {}
+    ;['pop', 'shift', 'unshift', 'push', 'splice'].forEach(key => {
+        instrumentations[key] = function(...args) {
+            // issue #2137，如果在 effect 中用 push，length 改变会导致循环调用 effect
+            pauseTracking()
+            const res = this[key].apply(this, args)
+            resetTracking()
+            return res
+        }
+    })
+    return instrumentations
+}
+
+function trigger(target, type, key, newValue, oldValue = null) {
+    const depsMap = targetMap.get(target)
+    if (!depsMap) return
+    const effects = new Set()
+    const deps = []
+    if (key === 'length' && isArray(target)) {
+        depsMap.forEach((dep, key) => {
+            // length 修改后的值小于某一个索引，相当于删除，要触发对应索引的依赖
+            if (key === 'length' || key > newValue) {
+                deps.push(dep)
+            }
+        })
+    } else {
+        if (key !== undefined) {
+            deps.push(depsMap.get(key))
+        }
+        switch(type) {
+            case TriggerOpTypes.ADD:
+                if (isIntegerKey(key)) {
+                    // 新增项目会导致 length 变化
+                    deps.push(depsMap.get('length'))
+                }
+                break
+            case TriggerOpTypes.SET:
+                break
+        }
+    }
+    deps.forEach(dep => {
+        if (!!dep) {
+            effects.add(...dep)
+        }
+    })
+    effects.forEach(effect => effect())
+}
+
+function track(target, key) {
+    if (shouldTrack && activeEffect) {
+        let depsMap = targetMap.get(target)
+        if (!depsMap) {
+            targetMap.set(target, (depsMap = new Map()))
+        }
+        let dep = depsMap.get(key)
+        if (!dep) {
+            depsMap.set(key, (dep = new Set()))
+        }
+        if (!dep.has(activeEffect)) {
+            // 做双向收集，方便后续清理 dep
+            dep.add(activeEffect)
+            activeEffect.deps.push(dep)
+        }
+    }
+}
+function cleanupEffect(target) {
+    // 双向清空
+    target?.length > 0 && target.forEach(dep => {
+        dep.delete(target)
+    })
+    target.length = 0
+}
+
+function effect(fn, options = null) {
+    const _effect = function () {
+        this.deps = []
+        let parent = undefined
+        try {
+            parent = activeEffect
+            activeEffect = this
+            cleanupEffect(this)
+            return fn()
+        } finally {
+            activeEffect = parent
+            parent = undefined
+        }
+    }
+
+    if (options) {
+        _effect.options = options
+    }
+    const runner = _effect.bind(_effect)
+    
+    if (!options || !options.lazy) {
+        runner()
+    }
+    return runner
+}
+
+function createGetter(isReadonly = false, isShallow = false) {
+    return function get(target, key, receiver) {
+        if (isArray(target) && hasOwn(arrayInstrumentations, key)) {
+            return Reflect.get(arrayInstrumentations, key, receiver)
+        }
+        const res = Reflect.get(target, key, receiver)
+        track(target, key)
+        if (isShallow) {
+            return res
+        }
+        if (isObject(res)) {
+            return reactive(res)
+        }
+        return res
+    }
+}
+function createSetter() {
+    return function set(target, key, value, receiver) {
+        const oldValue = target[key]
+        const hadKey = 
+            isArray(target) && isIntegerKey(key) ?
+                Number(key) < target.length :
+                hasOwn(target, key)
+        const result = Reflect.set(target, key, value, receiver)
+        if (!hadKey) {
+            trigger(target, TriggerOpTypes.ADD, key, value)
+        } else if (value !== oldValue) {
+            trigger(target, TriggerOpTypes.SET, key, value, oldValue)
+        }
+        return result
+    }
+}
+function deleteProperty(target, key) {
+    const hadKey = hasOwn(target, key)
+    const oldValue = target[key]
+    const result = Reflect.deleteProperty(target, key)
+    if (result && hadKey) {
+        trigger(target, key, undefined, oldValue)
+    }
+    return result
+}
+const get = createGetter()
+const set = createSetter()
+const reactiveHandlers = {
+    get,
+    set,
+    deleteProperty
+}
+const shallowReactiveHandlers = Object.assign(reactiveHandlers, {
+    get: createGetter(false, true)
+})
+const shallowReactiveMap = new WeakMap()
+function shallowReactive(target) {
+    return createReactiveObject(target, false, shallowReactiveHandlers, shallowReactiveMap)
+}
+function reactive(target) {
+    return createReactiveObject(target, false, reactiveHandlers, reactiveMap)
+}
+function createReactiveObject(target, isReadonly, baseHandlers, proxyMap) {
+    if (!isObject(target)) return target
+
+    const existing = proxyMap.get(target)
+    if (existing) return existing
+
+    const proxy = new Proxy(target, baseHandlers)
+    proxyMap.set(target, proxy)
+    return proxy
+}
+
+// ------------------------------------------------------------------
+let renderer
+let uid = 0
+let isMounted = false
+const ShapeFlags = {
+    ELEMENT : 1,
+    FUNCTIONAL_COMPONENT : 1 << 1,
+    STATEFUL_COMPONENT : 1 << 2,
+    TEXT_CHILDREN : 1 << 3,
+    ARRAY_CHILDREN : 1 << 4
+}
+ShapeFlags.COMPONENT = ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.FUNCTIONAL_COMPONENT
+function patchEvent(el, key, prevValue, nextValue) {
+    const invokers = el._vei || (el._vel = {})
+    const existing = invokers[key]
+    if (nextValue && existing) {
+        existing.value = nextValue
+    } else {
+        if (nextValue) {
+            const invoker = invokers[key] = (() => {
+                const invoker = (e) => {
+                    invoker.value(e)
+                }
+                invoker.value = nextValue
+                return invoker
+            })()
+            el.addEventListener(key, invoker)
+        } else {
+            el.removeEventListener(key, nextValue, existing)
+        }
+    }
+}
+const patchProp = (el, key, preValue, nextValue) => {
+    if (key === 'class') {
+        el.className = nextValue
+    } else if (key === 'style') {
+        for (const key in nextValue) {
+            el.style[key] = nextValue[key]
+        }
+    } else if (key.startsWith('on')) {
+        key = key.slice(2).toLowerCase()
+        patchEvent(el, key, preValue, nextValue)
+    } else {
+        el[key] = nextValue
+    }
+}
+const nodeOpts = {
+    insert(child, parent, referenceNode) {
+        parent.insertBefore(child, referenceNode)
+    },
+    remove(child) {
+        const parent = child.parentNode
+        if (parent) {
+            parent.removeChild(child)
+        }
+    },
+    createElement: tag => document.createElement(tag),
+    createText: content => document.createTextNode(content),
+    setText: (node, content) => node.nodeValue = content,
+    setElementText: (el, content) => el.textContent = content,
+    parentNode: node => node.parentNode,
+    nextSibling: node => node.nextSibling,
+    querySelector: selector => document.querySelector(selector),
+    cloneNode: el => el.cloneNode(true)
+}
+const rendererOptions = Object.assign({patchProp}, nodeOpts)
+function createAppAPI(render) {
+    return function createApp(rootComponent, rootProps) {
+        const app = {
+            _uid: uid++,
+            _component: rootComponent,
+            _props: rootProps,
+            _instance: null,
+            _context: null,
+            _container: null,
+            // 生成 vnode 交给 render 挂载
+            mount(container) {
+                if (!isMounted) {
+                    const vnode = createVNode(rootComponent, rootProps)
+                    render(vnode, container)
+                    isMounted = true
+                    app._container = container
+                }
+            }
+        }
+        return app
+    }
+}
+function createRenderer(options) {
+    const {
+        insert: hostInsert,
+        remove: hostRemove,
+        createElement: hostCreateElement,
+        createText: hostCreateText,
+        setText: hostSetText,
+        setElementText: hostSetElementText,
+        parentNode: hostParentNode,
+        nextSibling: hostNextSibling,
+        cloneNode: hostCloneNode,
+        patchProp: hostPatchProp
+    } = options
+    function setupStatefulComponent(instance) {
+        const Component = instance.type
+        const { setup } = Component
+        // 定义 render 中用的 proxy
+        instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
+        if (setup) {
+            // 定义上下文传给 setup
+            const setupContext = instance.setupContext = createSetupContext(instance)
+            currentInstance = instance
+            pauseTracking()
+            const setupResult = setup(instance.props, setupContext)
+            resetTracking()
+            currentInstance = null
+            handleSetupResult(instance, setupResult)
+        } else {
+            // 定义 proxy 传给 render
+            finishComponentSetup(instance)
+        }
+    }
+    function initProps(instance, rawProps, isStateful) {
+        const props= {}
+        const attrs= {}
+        // TODO: 属性待细分处理
+        // for (let key in rawProps) {
+        //     props[key] = rawProps[key]
+        // }
+        if (isStateful) {
+            instance.props = rawProps
+        } 
+        instance.attrs = attrs
+    }
+    function setupComponent(instance) {
+        const { props, children } = instance.vnode
+        // 判断是否是状态组件
+        const isStateful = instance.vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+        initProps(instance, props, isStateful)
+        const setupResult = isStateful
+            ? setupStatefulComponent(instance)
+            : undefined
+
+        return setupResult
+    }
+    function createComponentInstance(vnode) {
+        const instance = {
+            uid: uid++,
+            vnode,
+            type: vnode.type,
+            ctx: {},
+            props: {},
+            attrs: {},
+            setupState: {},
+            render: null,
+            isMounted: false
+        }
+        instance.ctx = { _: instance }
+        return instance
+    }
+    function handleSetupResult(instance, setupResult) {
+        if (isFunction(setupResult)) {
+            // setup 返回函数，赋给 instance.render
+            instance.render = setupResult
+        } else if (isObject(setupResult)) {
+            // setup 返回对象，说明是状态
+            instance.setupState = setupResult
+        }
+        finishComponentSetup(instance)
+    }
+    function finishComponentSetup(instance) {
+        const Component = instance.type
+        // setup 返回状态时，采用用户定义的 render 函数 
+        if(!instance.render) {
+            instance.render = Component.render || (() => {})
+        }
+    }
+    const setupRenderEffect = (instance, initialVNode, container) => {
+        // render 需要响应属性或状态的变化
+        const componentUpdateFn = () => {
+            if (!instance.isMounted) {
+                const { el, props } = initialVNode
+                const proxyToUse = instance.proxy
+                // 执行 render 获得子树
+                const subTree = 
+                    (instance.subTree = instance.render.call(proxyToUse, proxyToUse))
+                patch(null, subTree, container)
+                initialVNode.el = subTree.el
+                instance.isMounted = true
+            } else {
+                // 更新
+                const proxyToUse = instance.proxy
+                const nextTree = instance.render.call(proxyToUse, proxyToUse)
+                const prevTree = instance.subTree
+                instance.subTree = nextTree
+                patch(prevTree, nextTree, hostParentNode(prevTree.el))
+                // next.el = nextTree.el
+            }
+        }
+        instance.update = effect(componentUpdateFn)
+    }
+    const mountComponent = (initialVNode, container) => {
+        // 创建组件实例
+        const instance =  initialVNode?.component || 
+            (initialVNode.component = createComponentInstance(initialVNode))
+        // 处理 prop、slots、调用 setup、初始化 render
+        setupComponent(instance)
+        // 执行组件定义的 render
+        setupRenderEffect(
+            instance,
+            initialVNode,
+            container,
+        )
+    }
+    const shouldUpdateComponent = (prevVNode, nextVNode) => {
+        const { props: prevProps, children: prevChildren } = prevVNode
+        const { props: nextProps, children: nextChildren} = nextVNode
+        if (prevChildren || nextChildren) {
+            if (!nextChildren) {
+                return true
+            }
+        }
+        // console.log(prevProps, nextProps)
+        if (prevProps === nextProps) {
+            return false
+        }
+        if (!prevProps) {
+            return !!nextProps
+        }
+        if (!nextProps) {
+            return true
+        }
+        const nextKeys = Object.keys(nextProps)
+        if (nextKeys.length !== Object.keys(prevProps)) {
+            return true
+        }
+        for (let i = 0, l = nextKeys.length; i < l; i++) {
+            const key = nextKeys[i]
+            if (prevProps[key] !== nextProps[key]) {
+                return true
+            }
+        }
+        return false
+    }
+    function invalidateJob(job) {
+        const i = queue.indexOf(job)
+        if (i > flushIndex) {
+            queue.splice(i, 1)
+        }
+    }
+    const updateComponent = (n1, n2) => {
+        // 拿到组件实例
+        const instance = (n2.component = n1.component)
+        if (shouldUpdateComponent(n1, n2)) {
+            instance.next = n2
+            instance.update()
+        } else {
+            // 不需要更新，直接复制
+            n2.el = n1.el
+            instance.vnode = n2
+        }
+    }
+    const processComponent = (n1, n2, container) => {
+        if (n1 === null) {
+            // 挂载流程
+            mountComponent(n2, container)
+        } else {
+            // TODO: 更新流程
+            updateComponent(n1, n2)
+        }
+    }
+    const mountChildren = (children, container) => {
+        children.forEach(child => {
+            child = normalizeVNode(child)
+            patch(null, child, container)
+        })
+    }
+    function getSequence(arr) {
+        // dp[i] 表示以 arr 中第 i 位结尾的最长递增子序列长度
+        const dp = []
+        const len = arr.length
+        const result = []
+        for (let i = 0; i < len; i++) {
+            dp[i] = 1
+            const currentRes = []
+            for (let j = 0; j < i; j++) {
+                const current = arr[i]
+                const compare = arr[j]
+                if (compare >= current) {
+                    continue
+                }
+                const dpJ = dp[j]
+                if (1 + dpJ > dp[i]) {
+                    currentRes.push(j)
+                    dp[i] = 1 + dpJ
+                }
+            }
+            currentRes.push(i)
+            result.push(currentRes)
+        }
+        let maxLen = 0
+        let final = null
+        result.forEach(arr => {
+            const len = arr.length
+            if (len > maxLen) {
+                final = arr
+                maxLen = len
+            }
+        })
+        console.log(final)
+    }
+    // function getSequence(arr) {
+    //     const length = arr.length
+    //     if (!length) {
+    //         return 0
+    //     }
+    //     let len = 1
+    //     const dp = []
+    //     dp[len] = arr[0]
+    //     const result = [0]
+    //     for(let i = 1; i < length; i++) {
+    //         const current = arr[i]
+    //         if (current > dp[len]) {
+    //             result.push(i)
+    //             dp[++len] = current
+    //         } else {
+    //             let l = 1, r = len, pos = 0
+    //             while (l <= r) {
+    //                 const mid = (l + r) >> 1
+    //                 if (dp[mid] < current) {
+    //                     pos = mid
+    //                     l = mid + 1
+    //                 } else {
+    //                     r = mid - 1
+    //                 }
+    //             }
+    //             dp[pos + 1] = current
+    //         }
+    //     }
+    //     return result
+    // }
+    const patchKeyedChildren = (c1, c2, container) => {
+        let i = 0
+        const l2 = c2.length
+        let e1 = c1.length - 1 // prev ending index
+        let e2 = l2 - 1 // next ending index
+
+        // 从头比较
+        while (i <= e1 && i <= e2) {
+            const n1 = c1[i]
+            const n2 = normalizeVNode(c2[i])
+            if (n1.type === n2.type) {
+                patch(n1, n2, container)
+            } else {
+                break
+            }
+            i++
+        }
+        // 从尾比较
+        while (i <= e1 && i <= e2) {
+            const n1 = c1[e1]
+            const n2 = normalizeVNode(c2[e2])
+            if (n1.type === n2.type) {
+                patch(n1, n2, container)
+            } else {
+                break
+            }
+            e1--
+            e2--
+        }
+        // (a b)
+        // (a b) c
+        // or
+        //   (a b)
+        // c (a b)
+        if (i > e1) {
+            if (i <= e2) {
+                const nextPos = e2 + 1
+                const anchor = nextPos < l2 ? c2[nextPos].el : null
+                while(i <= e2) {
+                    patch(null, normalizeVNode(c2[i]), container, anchor)
+                    i++
+                }
+            }
+        }
+        // (a b) c
+        // (a b)
+        // a (b c)
+        // (b c)
+        else if (i > e2) {
+            while (i <= e1) {
+                hostRemove(c1[i])
+                i++
+            }
+        }
+        else {
+            const s1 = i
+            const s2 = i
+            const keyToNewIndexMap = new Map()
+            for (i = s2; i <= e2; i++) {
+                const nextChild = (c2[i] = normalizeVNode(c2[i]))
+                if (nextChild.key != null) {
+                    keyToNewIndexMap.set(nextChild.key, i)
+                }
+            }
+
+            let j
+            let patched = 0
+            const toBePatched = e2 - s2 + 1
+            let moved = false
+            let maxNewIndexSoFar = 0
+            const newIndexToOldIndexMap = new Array(toBePatched).fill(0)
+
+            for (i = s1; i <= e1; i++) {
+                const prevChild = c1[i]
+                if (patched >= toBePatched) {
+                    hostRemove(prevChild)
+                    continue
+                }
+                let newIndex
+                for (j = s2; j <= e2; j++) {
+                    if (
+                        newIndexToOldIndexMap[j - s2] === 0 && prevChild.type === c2[i].type
+                    ) {
+                        newIndex = j
+                        break
+                    }
+                }
+                if (newIndex === undefined) {
+                    hostRemove(prevChild)
+                } else {
+                    newIndexToOldIndexMap[newIndex - s2] = i + 1
+                    if (newIndex >= maxNewIndexSoFar) {
+                        maxNewIndexSoFar = newIndex
+                    } else {
+                        moved = true
+                    }
+                    patch(prevChild, c2[newIndex], container, null)
+                    patched++
+                }
+            }
+            
+            const increasingNewIndexSequence = moved
+                ? getSequence(newIndexToOldIndexMap)
+                : []
+            j = increasingNewIndexSequence.length - 1
+            for (i = toBePatched - 1; i >= 0; i--) {
+                const newIndex = s2 + i
+                const nextChild = c2[newIndex]
+                const anchor = newIndex < l2 ? c2[newIndex + 1].el : null
+                if (newIndexToOldIndexMap[i] === 0) {
+                    patch(null, nextChild, container, anchor)
+                } else if (moved) {
+                    if (j < 0 || i !== increasingNewIndexSequence[j]) {
+                        hostInsert(nextChild, container, anchor)
+                    } else {
+                        j--
+                    }
+                }
+            }
+        }
+    }
+    const patchChildren = (n1, n2, container) => {
+        const c1 = n1.children
+        const prevShapeFlag = n1 ? n1.shapeFlag : 0
+        const c2 = n2.children
+        const { shapeFlag } = n2
+        // children 的 3 种情况，textChildren、arrayChildren、no-children
+        if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+            if (c2 !== c1) {
+                hostSetElementText(container, c2)
+            }
+        } else {
+            if (prevShapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+                if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+                    // diff
+                    patchKeyedChildren(c1, c2, container)
+                } else {
+                    // 没有新子节点，删除老的子节点
+                    children.forEach(child => {
+                        // TODO: 暂时只处理元素情况
+                        hostRemove(child)
+                    })
+                }
+            } else {
+                // 上一个 children 是 text 或者 null
+                // 新 children 是 array 或 null
+                // 挂载新 children
+                if (prevShapeFlag & ShapeFlags.TEXT_CHILDREN) {
+                    hostSetElementText(container, '')
+                }
+                if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+                    mountChildren(c2, container)
+                }
+            }
+        }
+    }
+    const patchProps = (el, vnode, oldProps, newProps) => {
+        if (oldProps !== newProps) {
+            for (let key in newProps) {
+                const next = newProps[key]
+                const prev = oldProps[key]
+                if (next !== prev) {
+                    hostPatchProp(el, key, prev, next)
+                }
+            }
+            for (let key in oldProps) {
+                if (!(key in newProps)) {
+                    hostPatchProp(el, key, oldProps[key], null)
+                }
+            }
+        }
+    }
+    
+    const processElement = (n1, n2, container) => {
+        if (n1 === null) {
+            // 创建元素
+            let el
+            const { type, props, shapeFlag } = n2
+            el = n2.el = hostCreateElement(type)
+            // 挂载子节点
+            if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+                hostSetElementText(el, n2.children)
+            } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+                mountChildren(n2.children, el)
+            }
+            // 设置属性
+            if (props) {
+                Object.keys(props).forEach(key => {
+                    if (key !== 'value') {
+                        hostPatchProp(el, key, null, props[key])
+                    }
+                })
+            }
+            // 插入
+            hostInsert(el, container, null)
+        } else {
+            // TODO: 更新
+            const el = (n2.el = n1.el)
+            const oldProps = n1.props
+            const newProps = n2.props
+            patchChildren(n1, n2, el)
+            patchProps(el, n2, oldProps, newProps)
+        }
+    }
+    const processText = (n1, n2, container) => {
+        if (n1 == null) {
+            hostInsert(
+                (n2.el = hostCreateText(n2.children)),
+                container,
+            )
+        } else {
+           // TODO: 更新
+           console.log('text update')
+        }
+    }
+    const patch = (n1, n2, container) => {
+        if (n1 === n2) {
+            return
+        }
+
+        if (n1 && n1.type !== n2.type) {
+            // 得到下一个节点
+            anchor = hostNextSibling(n1.el)
+            // 删除旧节点
+            hostRemove(n1.el)
+            n1 = null
+        }
+
+        const { type, ref, shapeFlag } = n2
+        switch(type) {
+            case TEXT:
+                processText(n1, n2, container)
+                break
+            default:
+                if (shapeFlag & ShapeFlags.ELEMENT) {
+                    // type 是元素
+                    processElement(n1, n2, container)
+                } else if (shapeFlag & ShapeFlags.COMPONENT) {
+                    // type 是组件
+                    processComponent(n1, n2, container)
+                }
+        }
+    }
+
+    // 将 vnode 转化成真实 dom 挂到 container 上
+    const render = (vnode, container) => {
+        patch(container._vnode || null, vnode, container)
+        container._vnode = vnode 
+    }
+    return {
+        render,
+        createApp: createAppAPI(render)
+    }
+}
+function ensureRenderer() {
+    return renderer || createRenderer(rendererOptions)
+}
+function createApp(...args) {
+    const app = ensureRenderer().createApp(...args)
+    const { mount } = app
+    app.mount = (container) => {
+        container = typeof container === 'string' ? document.querySelector(container) : container
+        container.innerHTML = ''
+        mount(container, false)
+    }
+    return app
+}
+
+function createVNode(type, props = null, children = null) {
+    const shapeFlag = isString(type)
+        ? ShapeFlags.ELEMENT
+            : isObject(type)
+                ? ShapeFlags.STATEFUL_COMPONENT
+                    : isFunction(type)
+                        ? ShapeFlags.FUNCTIONAL_COMPONENT
+                            : 0
+
+    return createBaseVNode(
+        type,
+        props,
+        shapeFlag,
+        children
+    )
+}
+function createBaseVNode(type, props, shapeFlag, children) {
+    const vnode = {
+        __v_isVNode: true,
+        type,
+        props,
+        key: props && props.key,
+        children,
+        component: null,
+        el: null,
+        shapeFlag,
+    }
+    normalization(vnode, children)
+    return vnode
+}
+function normalization(vnode, children) {
+    let type = 0 // 标志子节点类型
+    if (children === null) {
+        vnode.children = null
+    } else if (isArray(children)) {
+        type = ShapeFlags.ARRAY_CHILDREN
+    } else {
+        type = ShapeFlags.TEXT_CHILDREN
+    }
+    // 标志节点和子节点类型
+    vnode.shapeFlag |= type
+}
+
+let currentInstance = null
+const PublicInstanceProxyHandlers = {
+    get({ _: instance }, key) {
+        const { ctx, setupState, props, data } = instance
+        if (key[0] !== '$') {
+            if (hasOwn(setupState, key)) {
+                return setupState[key]
+            } else if (hasOwn(data, key)) {
+                return data[key]
+            } else if (hasOwn(props, key)) {
+                return props[key]
+            } else if (hasOwn(ctx, key)) {
+                return ctx[key]
+            }
+        }
+    },
+    set({ _: instance }, key, value) {
+        const { ctx, setupState, props, data } = instance
+        if (hasOwn(setupState, key)) {
+            setupState[key] = value
+            return true
+        } else if (hasOwn(data, key)) {
+            data[key] = value
+            return true
+        } else if (hasOwn(props, key)) {
+            console.warn('props can not set')
+            return false
+        } else if (hasOwn(ctx, key)) {
+            ctx[key] = value
+            return true
+        }
+    }
+}
+function createSetupContext(instance) {
+    const expose = exposed => {
+        instance.exposed = exposed || {}
+    }
+    return {
+        slots: instance.slots,
+        emit: instance.emit,
+        expose
+    }
+}
+
+function h(type, propsOrChildren = undefined, children = undefined) {
+    const l = arguments.length
+    if (l === 2) {
+        if (isObject(propsOrChildren) && !isArray(propsOrChildren)) {
+            if (isVNode(propsOrChildren)) {
+                return createVNode(type, null, [propsOrChildren])
+            }
+            // 属性
+            return createVNode(type, propsOrChildren)
+        } else {
+            // children
+            return createVNode(type, null, propsOrChildren)
+        }
+    } else {
+        if (l > 3) {
+            children = Array.prototype.slice.call(arguments, 2)
+        } else {
+            if (l === 3 && isVNode(children)) {
+                children = [children]
+            }
+        }
+        return createVNode(type, propsOrChildren, children)
+    }
+}
+
+const TEXT = Symbol('text')
+function normalizeVNode(child) {
+    if (typeof child === 'object') {
+        return child
+    } else {
+        // string and number
+        return createVNode(TEXT, null, String(child))
+    }
+}
+    </script>
+    <div id="app"></div>
+    <script>
+        let Test = {
+            setup(props) {
+
+                return () => {
+                    console.log(props)
+                    return h('div', { style: { color: 'green' } }, [
+                        h('p', null, `${props.name}`)
+                    ])
+                }
+            }
+        }
+        let App = {
+            setup(props, context) {
+                let state = reactive({ flag: true });
+                // let p = reactive({name: {
+                //     a: 'zhang'
+                // }})
+                // setTimeout(() => {
+                //     state.flag = false;
+                //     p.name.a = 'zongzhi'
+                // }, 1000);
+
+                let p = reactive({name: 'zhang'})
+                setTimeout(() => {
+                    state.flag = false;
+                    p.name = 'zongzhi'
+                }, 1000);
+
+                // return () => {
+                //     // return state.flag ? h(Test, { name: 'zhang' }) : h(Test, { name: 'zongzhi'})
+                //     return h(Test, p)
+                // }
+
+                return () => {
+                    return state.flag ?
+                     h('div', { style: { color: 'red' } }, [
+                            h('li', { key: 'a' }, 'a'),
+                            h('li', { key: 'b' }, 'b'),
+                            h('li', { key: 'c' ,style:{color:'yellow'}}, 'c'),
+                            h('li', { key: 'd' }, 'd'),
+                            h('li', { key: 'e' }, 'e'),
+                            h('li', { key: 'q' }, 'q'),
+                            h('li', { key: 'f' }, 'f'),
+                            h('li', { key: 'g' }, 'g'),
+                        ]) 
+                        :
+                        h('div', { style: { color: 'blue' } }, [
+                        h('li', { key: 'a' }, 'a'),
+                            h('li', { key: 'b' }, 'b'),
+                            h('li', { key: 'e' }, 'e'),
+                            h('li', { key: 'c', style:{color:'green'} }, 'c'),
+                            h('li', { key: 'd' }, 'd'),
+                            h('li', { key: 'h' }, 'h'),
+                            h('li', { key: 'f' }, 'f'),
+                            h('li', { key: 'g' }, 'g'),
+                        ])
+                }
+            },
+        }
+        let app = createApp(App, { name: 'zf', age: 12 });
+        app.mount('#app');
+    </script>
+</body>
+
+</html>

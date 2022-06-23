@@ -13,6 +13,15 @@ module.exports = [
         ]
     },
     {
+        text: 'Vue 3',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './reactive.md',
+            './create.md',
+        ]
+    },
+    {
         text: 'CSS',
         collapsible: false,
         sidebarDepth: 1,
