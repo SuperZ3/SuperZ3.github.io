@@ -19,6 +19,10 @@ module.exports = [
         children: [
             './reactive.md',
             './create.md',
+            './lifecyle.md',
+            './watch.md',
+            './vuerouter.md',
+            './vuex.md'
         ]
     },
     {
