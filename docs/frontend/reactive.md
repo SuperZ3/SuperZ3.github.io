@@ -377,13 +377,19 @@ function toRefs(target) {
 
 ## 3. computed
 
-computed 接收一个 getter 函数，返回不可变的响应式 ref 对象，或者接收一个带有 get、set 函数的对象，返回可写 ref 对象。我们要做几件事：
+computed 接收一个 getter 函数，返回不可变的响应式 ref 对象，或者接收一个带有 get、set 函数的对象，返回可写 ref 对象
 
-1. 返回一个 ref 对象 p
-2. 设置 p.value 时，调用 set 或报错
-3. 访问 p.value 时，返回 getter 的结果，如果有副作用需要收集 effect
-4. 多次访问 p.value 返回同一个值
-5. 改变 getter 内使用的某一属性值，再次访问 p.value 时，重新执行 getter 拿到结果
+1. 返回一个 ref 对象
+
+2. 访问 ref.value 时，返回 getter 函数执行结果
+    - 由于 getter 内部依赖的数据 x 变更时，getter 应再次执行，所以要把 getter 放到 effect 中
+
+3. 当 x 不变时，多次访问 ref.value 应返回相同结果，即 computed 具有缓存值的特性
+    - 我们设置一个 flag，当 flag === true 时就执行 effect 返回的 runner 函数，将得到值赋给 ref.value，然后令 flag = false，这样 x 不变而多次访问 ref.value 就不会执行 effect
+
+    - 当 x 改变时，再次访问 ref.value 应该得到新的值，所以我们要在 x 改变时令 flag === true，改造下 effect 增加 scheduler，在 scheduler 内改变 flag
+
+4. ref 是响应式对象，所以要在访问 ref.value 时收集依赖，在 scheduler 中触发依赖
 
 ```javascript
 function effect(fn) {
@@ -394,6 +400,7 @@ function effect(fn) {
     }
     const runner = _effect.bind(_effect)
     // if (!options || !options.lazy) ....
+    return runner
 }
 function trigger(target, type, key, newValue, oldValue) {
     // other code

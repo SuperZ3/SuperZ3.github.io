@@ -19,10 +19,20 @@ module.exports = [
         children: [
             './reactive.md',
             './create.md',
-            './lifecyle.md',
+            './lifecycle.md',
             './watch.md',
-            './vuerouter.md',
             './vuex.md'
+        ]
+    },
+    {
+        text: 'React',
+        collapsible: false,
+        sidebarDepth: 1,
+        children: [
+            './react.md',
+            './redux.md',
+            './reactrouter.md',
+            './jsx.md',
         ]
     },
     {
