@@ -2,7 +2,13 @@
 
 ## 1. reactive、effect
 
-reactive 用来将普通对象转换为响应式的，先对普通对象做处理
+reactive 用来将对象转换为响应式的，所谓响应式，即是在对象属性发生变化时得到通知，从而完成某些操作
+
+。。。。。。长文预警。。。。。。
+
+### 1.1 属性拦截
+
+这在 Vue2 中通过 defineProperty，在 Vue3 中通过 Proxy 实现的，实现方式都是在访问属性时收集需要执行的操作，在属性发生变化时，取出收集的操作依次执行
 
 ```javascript
 const reactiveMap = new WeakMap()
@@ -59,11 +65,13 @@ function createReactiveObject(target, proxyMap) {
 }
 ```
 
-现在基础版可以实现对对象的响应式处理，接下来考虑下依赖的收集（track）和触发（trigger），同时实现 effect，对属性变化做出反应
+### 1.2 依赖收集 & 副作用 effect
 
-+ effect：
-    - 将回调函数收集到对象属性对应的 dep 中
-    - effect 可能会有嵌套情况，需要保存上一层 effect，在当前层执行完后，回复上层
+上述代码实现了属性的追踪，接下来考虑下依赖的收集（track）和触发（trigger），同时实现 effect，对属性变化做出反应
+
++ effect(callback)：
+    - 将回调函数 callback，收集到其内部使用的属性对应的 dep 中
+    - effect 可能会有嵌套情况，需要保存上一层 effect，在当前层执行完后，继续执行上层
     - 在每次 track 前要执行必要的清理，否则会重复添加相同的 effect
 
 ```javascript
@@ -101,15 +109,18 @@ function trigger(target, key, newValue, oldValue) {
 }
 
 function cleanupEffect(target) {
+    const { deps } = target
     // 双向清空
-    target?.length > 0 && target.forEach(dep => {
-        dep.delete(target)
-    })
-    target.length = 0
+    if (deps?.length) {
+        deps.forEach(dep => {
+            dep.delete(target)
+        })
+        deps.length = 0
+    }
 }
-
-function effect(fn, options) {
+function effect(fn, options = null) {
     const _effect = function () {
+        this.deps = []
         let parent = undefined
         try {
             parent = activeEffect
@@ -121,13 +132,22 @@ function effect(fn, options) {
             parent = undefined
         }
     }
+
+    if (options) {
+        _effect.options = options
+    }
+    const runner = _effect.bind(_effect)
     
     if (!options || !options.lazy) {
-        _effect()
+        runner()
     }
-    return _effect
+    return runner
 }
 ```
+
+注意，这里使用的是函数形式的 _effect 包裹 fn，源码中将此段逻辑封装到了[类](https://github.com/vuejs/core/blob/main/packages/reactivity/src/effect.ts#L178)里
+
+### 1.3 处理数组
 
 接下来考虑对数组的处理，考虑下面的情况，当添加没有使用过的数组项时，需要触发副作用，但是，由于没有使用过，所以副作用并不会被新的索引收集
 
@@ -143,10 +163,12 @@ setTimeout(() => {
 // 报错，trigger 时，索引 100 的依赖是 undefined
 ```
 
-对上面的代码做下改造，增加对数组的处理，注意几点：
+对之前的代码做下改造，增加对数组的处理，注意几点：
 
-1. 当在 effect 中使用 push 等方法时，需要暂停依赖收集，因为 push 方法会访问 length 属性，导致 effect 死循环
+1. 当在 effect 中使用 push 等方法时，需要暂停依赖收集，因为 push 同时会访问 length 属性，导致 effect 死循环
 2. 数组新增项目时，新增索引没有依赖，此时可以触发 length 依赖代替该索引的依赖
+
+从 createGetter 开始，处理数组
 
 ```javascript
 const enum TriggerOpTypes {
@@ -155,18 +177,23 @@ const enum TriggerOpTypes {
   DELETE = 'delete',
   CLEAR = 'clear'
 }
+
+let shouldTrack = true
+const trackStack = []
+
 const isArray = (obj) => Object.prototype.toString.call(obj) === '[object Array]'
 const isIntegerKey = (key) => (typeof key === 'string' && '' + parseInt(key, 10) === key)
 const arrayInstrumentations = createArrayInstrumentations()
-let shouldTrack = true
-const trackStack = []
-function pauseTracking() {
-    trackStack.push(shouldTrack)
-    shouldTrack = false
-}
-function resetTracking() {
-    const last = trackStack.pop()
-    shouldTrack = last === undefined ? true : last 
+
+fuction createGetter(target, key) {
+    return function get(target, key, receiver) {
+        // other code
+        if (isArray(target) && hasOwn(arrayInstrumentations, key)) {
+            return Reflect.get(arrayInstrumentations, key, receiver)
+        }
+        // other code
+        return res
+    }
 }
 function createArrayInstrumentations() {
     const instrumentations = {}
@@ -180,6 +207,14 @@ function createArrayInstrumentations() {
         }
     })
     return instrumentations
+}
+function pauseTracking() {
+    trackStack.push(shouldTrack)
+    shouldTrack = false
+}
+function resetTracking() {
+    const last = trackStack.pop()
+    shouldTrack = last === undefined ? true : last 
 }
 function track(target, key) {
     if (shouldTrack && activeEffect) {
@@ -200,16 +235,6 @@ function createSetter() {
             trigger(target, TriggerOpTypes.SET, key, value, oldValue)
         }
         return result
-    }
-}
-fuction createGetter(target, key) {
-    return function get(target, key, receiver) {
-        // other code
-        if (isArray(target) && hasOwn(arrayInstrumentations, key)) {
-            return Reflect.get(arrayInstrumentations, key, receiver)
-        }
-        // other code
-        return res
     }
 }
 function trigger(target, type, key, newValue, oldValue) {
@@ -248,14 +273,28 @@ function trigger(target, type, key, newValue, oldValue) {
 }
 ```
 
+### 1.4 其它响应式 API
+
 接下来处理下其它响应式 API：
 
 1. readonly：只读不可更改，也就不需要追踪副作用
 2. shallowReactive：仅第一层做响应式处理
 3. shallowReadonly：仅第一层不可更改
 
+注意，嵌套的方式生成响应式对象需要特殊处理，假设有响应对象 `const r = readonly({})`：
+
+1. 形如 `reactive(r)`，应该直接返回内部的响应式对象 r
+2. 如果是 `readonly(r)`，应该返回内部响应式对象 r 的只读代理
+
 ```javascript
 function createReactiveObject(target, isReadonly, baseHandlers, proxyMap) {
+    // other code
+    if (
+        target[Reactiveflags.IS_RAW] && 
+        !(isReadonly && target[Reactiveflags.IS_REACTIVE]) // Reactiveflags 见下文
+    ) {
+        return target
+    }
     // other code
 }
 function createGetter(isReadonly = false, isShallow = false) {
@@ -304,19 +343,89 @@ function shallowReadonly(target) {
 }
 ```
 
+接下来增加工具函数，toRaw、isReactive、isReadonly、markRaw，为此需要处理下 createGetter 函数：
+
+- 对于 is 函数，可以访问一个特殊属性，如果是响应式的，则访问操作会被拦截，存在特殊属性则说明是响应式对象
+- 对于 toRaw 为了获取原始对象，同样可以用一个特殊属性，如果检测到该属性存在，就把 createGetter 接收的原始对象参数返回
+- 对于 markRaw 需要在对象上设置特殊属性告诉 createReactiveObject 不对其做响应式处理
+
+```javascript
+const enum ReactiveFlags = {
+    SKIP = '__v_skip',
+    IS_REACTIVE = '__v_isReactive',
+    IS_READONLY = '__v_isReadonly',
+    IS_SHALLOW = '__v_isShallow',
+    RAW = '__v_raw'
+}
+function createGetter(isReadonly = false, isShallow = false) {
+    return get(target, key, receiver) {
+        if (key === ReactiveFlags.IS_REACTIVE) {
+            return !isReadonly
+        } else if (key === ReactiveFlags.IS_REACTIVE) {
+            return isReadonly
+        } else if (key === ReactiveFlags.IS_SHALLOW) {
+            return isShallow
+        } else if (
+            key === ReactiveFlags.RAW &&
+            receiver === (
+                isReadonly
+                    ? isShallow
+                        ? shallowReadonlyMap
+                        : readonlyMap
+                    : isShallow
+                        ? shallowReacitveMap
+                        : reactiveMap
+            ).get(target)
+        ) {
+            return target
+        }
+        // other code
+    }
+}
+// const v = readonly(reactive({})) -> isReactive(v) === true
+function isReactive(v) {
+    if (isReadonly(v)) {
+        return isReactive(v[ReactiveFlags.RAW])
+    }
+    return !!(v && v[ReactiveFlags.IS_REACTIVE])
+}
+function isReadonly(v) {
+    return !!(v && v[ReactiveFlags.IS_READONLY])
+}
+function isShallow(v) {
+    return !!(v && v[ReactiveFlags.IS_SHALLOW])
+}
+function toRaw(o) {
+    const raw = o[ReactiveFlags.RAW]
+    return raw ? toRaw(raw) : raw
+}
+function createReactiveObject(target, isReadonly, baseHandlers, proxyMap) {
+    // other code
+    if (target[ReactiveFlags.RAW]) {
+        return target
+    }
+}
+function markRaw(v) {
+    Object.defineProperty(v, ReactiveFlags.SKIP, { value: true })
+    return v
+}
+```
+
 ## 2. refs
 
-ref 接受一个值 v，返回一个响应式对象，并将 v 赋给该对象的 value 属性，我们要做几件事：
+### 2.1 ref、toRef、toRefs
+
+ref 接受一个值 v，返回一个响应式对象，并将 v 赋给该对象的 value 属性：
 
 1. 响应式对象有唯一属性 value，所以要在访问 value 时收集依赖，设置时触发
-2. 如果 v 是一个值，将其赋给 value 即可，如果是对象，将对象变为响应式赋给 value
+2. 如果 v 是一个值，将其赋给 value 即可，如果是对象，将对象变为响应式再赋给 value
 
 ```javascript
 function ref(v) {
     return createRef(v)
 }
-const isRef = (v) => !!v?.__v_isRef
-const toReactive = (v) => isObject(v) ? reactive(v) : v
+const isRef = v => !!v?.__v_isRef
+const toReactive = v => (isObject(v) ? reactive(v) : v)
 function createRef(v) {
     if (isRef(v)) {
         return v
@@ -342,14 +451,16 @@ class RefImpl {
 }
 ```
 
-toRef 为响应式对象上某个 property 创建一个 ref，会与源属性保持连接，所以需要将源属性的值赋给 ref 的 value，当 ref 的 value 改变时，同时改变原属性的值。相当于对源属性添加一层代理
+toRef 为响应式对象上某个属性创建 ref 对象，通过该对象与源属性保持连接，相当于对源属性添加一层代理
+
+这样读取或设置 ref.value 时，会直接操作响应式对象
 
 ```javascript
 function toRef(target, key, defaultValue = undefined) {
     const v = target[key]
     return isRef(v) ? v : new ObjectRefImpl(target, key, defaultValue)
 }
-class ObjectRefImpl(target, key, defaultValue) {
+class ObjectRefImpl {
     public readonly __v_isRef = true
     constructor(public target, public key, public defaultValue) {}
     get value() {
@@ -362,16 +473,50 @@ class ObjectRefImpl(target, key, defaultValue) {
 }
 ```
 
-toRefs 将响应式对象转化为普通对象返回，新对象每个属性都是指向源对象对应属性的 ref
+toRefs 将响应式对象转化为普通对象返回，新对象每个属性都是指向源对象对应属性的 ref，这对于解构响应式对象属性有用
 
 ```javascript
+// const r = reactive({
+//     a: 1,
+//     b: 2
+// })
+// const { a, b } = r // 直接解构将失去响应性，这里直接把对应的值赋给了 a、b
+// const { a, b } = toRefs(r) // 使用 a.value、b.value，不会丢失响应性
 function toRefs(target) {
     const result = isArray(target) ? [] : {}
     for (let key in target) {
         const v = target[key]
-        result[key] = toRef(target, v)
+        result[key] = toRef(target, key, v)
     }
     return result
+}
+```
+
+### 2.2 传递 ref 到 reactive
+
+将 ref 赋给 reactive 的属性时，将自动解包 ref，表现为 reactive 的属性与 ref.value 是关联的，同时改变，可以在 createGetter、createSetter 中访问和设置 ref.value 即可将他们关联到一起
+
+在数组中的 ref 项不需要解包
+
+```javascript
+function createGetter(isReadonly = false, isShallow = false) {
+    return get(target, key, receiver) {
+        // const res = ....
+        if (isRef(res)) {
+            const shouldUnRef = !isArray(target) || !isIntegerKey(key)
+            return shouldUnRef ? res.value : res
+        }
+        // other code
+    }
+}
+function createSetter() {
+    return function set(target, key, value, receiver) {
+        // const oldValue = target[key]
+        if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
+            oldValue.value = value
+            return true
+        }
+    }
 }
 ```
 

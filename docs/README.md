@@ -21,7 +21,7 @@ home: true
 2. **浏览器**
     - 浏览器API、缓存
     - 登录权限（cookie、session...）
-    - 网络（跨域、fetch、xhr、手写axios）
+    - 网络（跨域）
     - 安全隐私（CSP、CORS、XSS、CSRF、MITM）
     - 架构、渲染原理
     - chromium、v8源码浅析
