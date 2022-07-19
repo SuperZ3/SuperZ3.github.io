@@ -1,0 +1,1 @@
+const e={key:"v-1f70d9e9",path:"/frontend/module.html",title:"CommonJS",lang:"zh-CN",frontmatter:{},excerpt:"",headers:[],git:{contributors:[{name:"SuperZ3",email:"zhangzz1024@163.com",commits:1}]},filePathRelative:"frontend/module.md"};export{e as data};

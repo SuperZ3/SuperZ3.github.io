@@ -1,0 +1,1 @@
+const e={key:"v-4cb0fe33",path:"/frontend/lifecycle.html",title:"\u751F\u547D\u5468\u671F\u94A9\u5B50 Composition",lang:"zh-CN",frontmatter:{},excerpt:"",headers:[],git:{contributors:[{name:"SuperZ3",email:"zhangzz1024@163.com",commits:1}]},filePathRelative:"frontend/lifecycle.md"};export{e as data};

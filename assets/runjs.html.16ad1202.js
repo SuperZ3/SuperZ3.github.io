@@ -1,0 +1,1 @@
+const t={key:"v-0175f0c9",path:"/frontend/runjs.html",title:"JS \u5728\u6D4F\u89C8\u5668\u6267\u884C\u8FC7\u7A0B",lang:"zh-CN",frontmatter:{},excerpt:"",headers:[],git:{contributors:[{name:"SuperZ3",email:"zhangzz1024@163.com",commits:4}]},filePathRelative:"frontend/runjs.md"};export{t as data};
