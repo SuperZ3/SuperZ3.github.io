@@ -1,0 +1,1 @@
+const t={key:"v-5c62d303",path:"/frontend/event.html",title:"EventEmitter",lang:"zh-CN",frontmatter:{},excerpt:"",headers:[],git:{contributors:[{name:"SuperZ3",email:"zhangzz1024@163.com",commits:1}]},filePathRelative:"frontend/event.md"};export{t as data};

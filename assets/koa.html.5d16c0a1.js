@@ -1,0 +1,1 @@
+const t={key:"v-1a0ae600",path:"/frontend/koa.html",title:"Koa",lang:"zh-CN",frontmatter:{},excerpt:"",headers:[],git:{contributors:[{name:"SuperZ3",email:"zhangzz1024@163.com",commits:1}]},filePathRelative:"frontend/koa.md"};export{t as data};
