@@ -8,6 +8,7 @@ module.exports = [
             './generator.md',
             './prototype.md',
             './fetch.md',
+            './websocket.md',
             './test.md',
             './practicejs.md',
         ]
@@ -19,8 +20,8 @@ module.exports = [
         children: [
             './reactive.md',
             './create.md',
-            './lifecycle.md',
             './watch.md',
+            './lifecycle.md',
             './vuex.md'
         ]
     },

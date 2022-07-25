@@ -99,7 +99,7 @@ setTimeout(() => abortController.abort, 10)
 
 Fetch 提供了对 Request 和 Response 对象的通用定义，用 Promise 和 XHR 可以实现简单的 Fetch API
 
-首先我们做下功能划分：
+首先做下功能划分：
 1. fetch 函数：构建 Request 实例，发起 XHR 请求，返回 Response 结果
 2. Request 类：存储请求需要的属性及方法
 3. Response 类： 存储响应的状态和方法
@@ -217,7 +217,7 @@ function fetch(input, options) {
 // 处理请求体
 function Request(input, options) {
     const body = options.body || {}
-    // init 可能是字符串或 Request 实例
+    // input 可能是字符串或 Request 实例
     if (input instanceof Request) {
         if (input.bodyUsed) {
             throw new Error('already used')
@@ -236,7 +236,7 @@ function Request(input, options) {
             input.bodyUsed = true
         }
     } else {
-        this.url = typeof init === 'string' && !!init.trim() ? init : location.href
+        this.url = typeof input === 'string' && !!input.trim() ? input : location.href
     }
 
     this.credentials = options?.credentials || this.credentials || 'same-origin'
