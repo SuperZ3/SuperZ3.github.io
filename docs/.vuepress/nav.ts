@@ -12,7 +12,7 @@ module.exports = [
             { text: 'LeetCode', link: '/algorithm/leetcode/' },
         ]
     },
-    { text: 'Rust', link: '/rust/' },
+    { text: 'Go', link: '/go/' },
     { text: '计算机基础', link: '/basic/' },
     { text: 'GitHub', link: 'https://github.com/SuperZ3' },
 ]
